@@ -28,6 +28,9 @@ public class Usuario {
     @Column(nullable = false, length = 100)
     private String password;
 
+    @Column(length = 15)
+    private String telefono;
+
     private LocalDate fechaNacimiento;
 
     @Column(length = 80)
@@ -58,6 +61,8 @@ public class Usuario {
     public void setCorreo(String correo) { this.correo = correo; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    public String getTelefono() { return telefono; }
+    public void setTelefono(String telefono) { this.telefono = telefono; }
     public LocalDate getFechaNacimiento() { return fechaNacimiento; }
     public void setFechaNacimiento(LocalDate fechaNacimiento) { this.fechaNacimiento = fechaNacimiento; }
     public String getRegion() { return region; }
