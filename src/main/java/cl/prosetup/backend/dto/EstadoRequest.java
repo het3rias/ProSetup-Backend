@@ -1,7 +1,7 @@
 package cl.prosetup.backend.dto;
 
-import cl.prosetup.backend.model.EstadoOrden;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 
-public record EstadoRequest(@NotNull(message = "El estado es obligatorio") EstadoOrden estado) {
+/** Nuevo estado de una orden: "Pagada", "Enviada" o "Entregada". */
+public record EstadoRequest(@NotBlank(message = "El estado es obligatorio") String estado) {
 }

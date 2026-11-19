@@ -1,19 +1,18 @@
 package cl.prosetup.backend.dto;
 
-import cl.prosetup.backend.model.Role;
 import cl.prosetup.backend.model.Usuario;
 
 import java.time.LocalDate;
 
-/** Representación pública de un usuario: nunca incluye la contraseña. */
+/** Usuario tal como lo espera el frontend. Nunca incluye la contraseña. */
 public record UsuarioResponse(
-        Long id, String run, String nombre, String apellidos, String correo,
-        LocalDate fechaNacimiento, String region, String comuna, String direccion,
-        Role rol, boolean activo) {
+        Long id, String run, String nombre, String apellidos, String email, String telefono,
+        LocalDate fechaNacimiento, String tipoUsuario, String region, String comuna, String direccion,
+        boolean activo) {
 
     public static UsuarioResponse de(Usuario u) {
         return new UsuarioResponse(u.getId(), u.getRun(), u.getNombre(), u.getApellidos(), u.getCorreo(),
-                u.getFechaNacimiento(), u.getRegion(), u.getComuna(), u.getDireccion(),
-                u.getRol(), u.isActivo());
+                u.getTelefono(), u.getFechaNacimiento(), u.getRol().etiqueta(), u.getRegion(),
+                u.getComuna(), u.getDireccion(), u.isActivo());
     }
 }

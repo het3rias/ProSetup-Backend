@@ -8,5 +8,7 @@ public record CategoriaRequest(
         @Size(max = 80, message = "El nombre admite hasta 80 caracteres")
         String nombre,
         @Size(max = 300, message = "La descripción admite hasta 300 caracteres")
-        String descripcion) {
+        String descripcion,
+        @Size(max = 500, message = "La imagen admite hasta 500 caracteres")
+        String imagen) {
 }
