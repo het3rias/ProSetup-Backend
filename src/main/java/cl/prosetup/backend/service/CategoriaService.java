@@ -38,7 +38,7 @@ public class CategoriaService {
         if (categorias.existsByNombreIgnoreCase(r.nombre().trim())) {
             throw new ConflictException("Ya existe una categoría llamada '" + r.nombre().trim() + "'");
         }
-        return categorias.save(new Categoria(r.nombre().trim(), r.descripcion()));
+        return categorias.save(new Categoria(r.nombre().trim(), r.descripcion(), r.imagen()));
     }
 
     @Transactional
@@ -50,6 +50,7 @@ public class CategoriaService {
         }
         c.setNombre(r.nombre().trim());
         c.setDescripcion(r.descripcion());
+        c.setImagen(r.imagen());
         return categorias.save(c);
     }
 

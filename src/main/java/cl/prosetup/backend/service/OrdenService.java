@@ -13,10 +13,16 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class OrdenService {
+
+    public static final int COSTO_ENVIO = 3990;
+    public static final int ENVIO_GRATIS_DESDE = 50000;
 
     private final OrdenRepository ordenes;
     private final ProductoRepository productos;
@@ -28,44 +34,95 @@ public class OrdenService {
         this.usuarios = usuarios;
     }
 
+    /** Retiro en tienda: gratis. Despacho a domicilio: gratis desde $50.000, si no $3.990. */
+    public static int calcularEnvio(int subtotal, String entrega) {
+        if (!"domicilio".equals(entrega) || subtotal == 0) return 0;
+        return subtotal >= ENVIO_GRATIS_DESDE ? 0 : COSTO_ENVIO;
+    }
+
     /**
      * Lógica de negocio de la compra:
-     * 1) verifica que cada producto exista y tenga stock suficiente,
-     * 2) calcula el precio con descuento y el total en el servidor (no se confía en el frontend),
-     * 3) descuenta el stock y guarda la orden con su detalle.
+     * 1) junta las líneas repetidas y verifica que cada producto exista y tenga stock suficiente,
+     * 2) calcula precios (con oferta), subtotal, envío y total en el servidor (no se confía en el frontend),
+     * 3) si todo está bien, descuenta el stock y guarda la orden como "Pagada";
+     *    si falta stock o el pago se rechaza, guarda la orden como "Rechazada" con su motivo y no toca el stock.
+     * Puede comprar un usuario con sesión (correoUsuario) o un invitado (null).
      */
     @Transactional
-    public OrdenResponse crear(String correo, OrdenRequest r) {
-        Usuario usuario = usuarios.findByCorreoIgnoreCase(correo)
-                .orElseThrow(() -> new NotFoundException("No existe el usuario " + correo));
+    public OrdenResponse crear(String correoUsuario, OrdenRequest r) {
+        String entrega = r.entrega();
+        if (!"domicilio".equals(entrega) && !"retiro".equals(entrega)) {
+            throw new BadRequestException("La entrega debe ser 'domicilio' o 'retiro'");
+        }
+        if ("domicilio".equals(entrega)
+                && (r.direccion() == null || r.direccion().calle() == null || r.direccion().calle().isBlank())) {
+            throw new BadRequestException("La dirección de entrega es obligatoria para despacho a domicilio");
+        }
 
         Orden orden = new Orden();
-        orden.setUsuario(usuario);
-        orden.setEstado(EstadoOrden.PAGADA); // el pago es simulado
-        orden.setDireccionEnvio(r.direccionEnvio() != null ? r.direccionEnvio() : usuario.getDireccion());
-        orden.setRegion(r.region() != null ? r.region() : usuario.getRegion());
-        orden.setComuna(r.comuna() != null ? r.comuna() : usuario.getComuna());
+        if (correoUsuario != null) {
+            orden.setUsuario(usuarios.findByCorreoIgnoreCase(correoUsuario).orElse(null));
+        }
+        orden.setClienteNombre(r.cliente().nombre().trim());
+        orden.setClienteApellidos(r.cliente().apellidos().trim());
+        orden.setClienteEmail(r.cliente().email().trim().toLowerCase());
+        orden.setEntrega(entrega);
+        OrdenRequest.Direccion d = r.direccion();
+        if ("domicilio".equals(entrega)) {
+            orden.setCalle(d.calle().trim());
+            orden.setDepartamento(d.departamento());
+            orden.setRegion(d.region());
+            orden.setComuna(d.comuna());
+        } else {
+            orden.setCalle("Retiro en tienda");
+        }
+        orden.setIndicaciones(d == null ? null : d.indicaciones());
 
-        int total = 0;
+        // Se juntan las líneas del mismo producto para validar el stock sobre el total pedido
+        Map<Long, Integer> cantidades = new LinkedHashMap<>();
         for (OrdenRequest.ItemRequest it : r.items()) {
-            Producto p = productos.findById(it.productoId())
-                    .orElseThrow(() -> new NotFoundException("No existe el producto con id " + it.productoId()));
-            if (p.getStock() < it.cantidad()) {
-                throw new BadRequestException("Stock insuficiente para '" + p.getNombre()
-                        + "'. Disponible: " + p.getStock());
-            }
-            p.setStock(p.getStock() - it.cantidad());
+            cantidades.merge(it.id(), it.cantidad(), Integer::sum);
+        }
 
+        List<String> problemas = new ArrayList<>();
+        List<Producto> comprados = new ArrayList<>();
+        int subtotal = 0;
+        for (Map.Entry<Long, Integer> e : cantidades.entrySet()) {
+            Producto p = productos.buscarParaActualizar(e.getKey())
+                    .orElseThrow(() -> new NotFoundException("No existe el producto con id " + e.getKey()));
+            int cantidad = e.getValue();
+            if (p.getStock() < cantidad) {
+                problemas.add("Stock insuficiente de " + p.getNombre() + " (disponible: " + p.getStock() + ").");
+            }
             OrdenItem item = new OrdenItem();
             item.setProducto(p);
-            item.setNombreProducto(p.getNombre());
-            item.setPrecioUnitario(p.getPrecioFinal());
-            item.setCantidad(it.cantidad());
-            item.setSubtotal(p.getPrecioFinal() * it.cantidad());
+            item.setCodigo(p.getCodigo());
+            item.setNombre(p.getNombre());
+            item.setImagen(p.getImagen());
+            item.setPrecioUnitario(p.precioFinal());
+            item.setCantidad(cantidad);
             orden.agregarItem(item);
-            total += item.getSubtotal();
+            comprados.add(p);
+            subtotal += item.subtotal();
         }
-        orden.setTotal(total);
+
+        int envio = calcularEnvio(subtotal, entrega);
+        orden.setSubtotal(subtotal);
+        orden.setCostoEnvio(envio);
+        orden.setTotal(subtotal + envio);
+
+        if (!problemas.isEmpty()) {
+            orden.setEstado(EstadoOrden.RECHAZADA);
+            orden.setMotivo("Stock insuficiente: " + String.join(" ", problemas));
+        } else if (r.simularRechazo()) {
+            orden.setEstado(EstadoOrden.RECHAZADA);
+            orden.setMotivo("El medio de pago rechazó la transacción.");
+        } else {
+            orden.setEstado(EstadoOrden.PAGADA);
+            for (Producto p : comprados) {
+                p.setStock(p.getStock() - cantidades.get(p.getId()));
+            }
+        }
         return OrdenResponse.de(ordenes.save(orden));
     }
 
@@ -80,30 +137,34 @@ public class OrdenService {
                 .map(OrdenResponse::de).toList();
     }
 
-    /** Un CLIENTE solo puede ver sus propias órdenes; ADMIN y VENDEDOR pueden ver todas. */
+    /** Un Cliente solo puede ver sus propias órdenes; Administrador y Vendedor pueden ver todas. */
     @Transactional(readOnly = true)
     public OrdenResponse obtener(Long id, String correo, boolean esPersonal) {
         Orden o = ordenes.findById(id)
                 .orElseThrow(() -> new NotFoundException("No existe la orden con id " + id));
-        if (!esPersonal && !o.getUsuario().getCorreo().equalsIgnoreCase(correo)) {
+        boolean esDueno = o.getUsuario() != null && o.getUsuario().getCorreo().equalsIgnoreCase(correo);
+        if (!esPersonal && !esDueno) {
             throw new AccessDeniedException("No puedes ver órdenes de otros usuarios");
         }
         return OrdenResponse.de(o);
     }
 
-    /** Si se cancela una orden, se devuelve el stock de sus productos. */
+    /** Cambia el estado de una orden pagada (Pagada, Enviada, Entregada). Las rechazadas no cambian. */
     @Transactional
-    public OrdenResponse cambiarEstado(Long id, EstadoOrden nuevo) {
+    public OrdenResponse cambiarEstado(Long id, String estadoTexto) {
+        EstadoOrden nuevo;
+        try {
+            nuevo = EstadoOrden.desdeEtiqueta(estadoTexto);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("El estado debe ser Pagada, Enviada o Entregada");
+        }
+        if (nuevo == EstadoOrden.RECHAZADA) {
+            throw new BadRequestException("Una orden no se puede marcar como rechazada manualmente");
+        }
         Orden o = ordenes.findById(id)
                 .orElseThrow(() -> new NotFoundException("No existe la orden con id " + id));
-        if (o.getEstado() == EstadoOrden.CANCELADA) {
-            throw new BadRequestException("La orden ya está cancelada y no puede cambiar de estado");
-        }
-        if (nuevo == EstadoOrden.CANCELADA) {
-            for (OrdenItem item : o.getItems()) {
-                Producto p = item.getProducto();
-                p.setStock(p.getStock() + item.getCantidad());
-            }
+        if (o.getEstado() == EstadoOrden.RECHAZADA) {
+            throw new BadRequestException("La orden fue rechazada y no puede cambiar de estado");
         }
         o.setEstado(nuevo);
         return OrdenResponse.de(o);
@@ -111,12 +172,11 @@ public class OrdenService {
 
     @Transactional(readOnly = true)
     public DashboardResponse dashboard() {
-        List<Orden> todas = ordenes.findAll();
-        long ventas = todas.stream()
-                .filter(o -> o.getEstado() != EstadoOrden.CANCELADA)
+        long ventas = ordenes.findAll().stream()
+                .filter(o -> o.getEstado() != EstadoOrden.RECHAZADA)
                 .mapToLong(Orden::getTotal).sum();
-        long criticos = productos.findAll().stream()
-                .filter(p -> p.getStock() <= p.getStockCritico()).count();
-        return new DashboardResponse(productos.count(), usuarios.count(), todas.size(), ventas, criticos);
+        long totalOrdenes = ordenes.count();
+        long criticos = productos.findAll().stream().filter(Producto::stockEsCritico).count();
+        return new DashboardResponse(productos.count(), usuarios.count(), totalOrdenes, ventas, criticos);
     }
 }

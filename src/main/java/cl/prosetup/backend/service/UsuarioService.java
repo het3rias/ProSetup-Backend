@@ -43,31 +43,31 @@ public class UsuarioService {
         return UsuarioResponse.de(buscarPorCorreo(correo));
     }
 
-    /** Registro público: siempre crea un usuario con rol CLIENTE. */
+    /** Registro público: siempre crea un usuario de tipo Cliente. */
     @Transactional
     public UsuarioResponse registrar(RegisterRequest r) {
-        UsuarioRequest req = new UsuarioRequest(r.run(), r.nombre(), r.apellidos(), r.correo(), r.password(),
-                r.fechaNacimiento(), r.region(), r.comuna(), r.direccion(), Role.CLIENTE, true);
+        UsuarioRequest req = new UsuarioRequest(r.run(), r.nombre(), r.apellidos(), r.email(), r.password(),
+                r.telefono(), r.fechaNacimiento(), r.region(), r.comuna(), r.direccion(), Role.CLIENTE.etiqueta(), true);
         return crear(req);
     }
 
-    /** Creación por el ADMIN (puede elegir cualquier rol). */
+    /** Creación por el Administrador (puede elegir cualquier tipo de usuario). */
     @Transactional
     public UsuarioResponse crear(UsuarioRequest r) {
         String run = Validaciones.normalizarRun(r.run());
-        validarDatos(run, r.correo());
+        validarDatos(run, r.email());
         if (!Validaciones.passwordValida(r.password())) {
             throw new BadRequestException("La contraseña debe tener entre 4 y 10 caracteres");
         }
         if (usuarios.existsByRun(run)) {
             throw new ConflictException("Ya existe un usuario con ese RUN");
         }
-        if (usuarios.existsByCorreoIgnoreCase(r.correo().trim())) {
+        if (usuarios.existsByCorreoIgnoreCase(r.email().trim())) {
             throw new ConflictException("Ya existe un usuario con ese correo");
         }
         Usuario u = new Usuario();
         u.setRun(run);
-        u.setCorreo(r.correo().trim().toLowerCase());
+        u.setCorreo(r.email().trim().toLowerCase());
         u.setPassword(encoder.encode(r.password()));
         copiarDatos(u, r);
         return UsuarioResponse.de(usuarios.save(u));
@@ -77,16 +77,16 @@ public class UsuarioService {
     public UsuarioResponse actualizar(Long id, UsuarioRequest r) {
         Usuario u = buscar(id);
         String run = Validaciones.normalizarRun(r.run());
-        validarDatos(run, r.correo());
+        validarDatos(run, r.email());
         if (!u.getRun().equals(run) && usuarios.existsByRun(run)) {
             throw new ConflictException("Ya existe un usuario con ese RUN");
         }
-        if (!u.getCorreo().equalsIgnoreCase(r.correo().trim())
-                && usuarios.existsByCorreoIgnoreCase(r.correo().trim())) {
+        if (!u.getCorreo().equalsIgnoreCase(r.email().trim())
+                && usuarios.existsByCorreoIgnoreCase(r.email().trim())) {
             throw new ConflictException("Ya existe un usuario con ese correo");
         }
         u.setRun(run);
-        u.setCorreo(r.correo().trim().toLowerCase());
+        u.setCorreo(r.email().trim().toLowerCase());
         if (r.password() != null && !r.password().isBlank()) {
             if (!Validaciones.passwordValida(r.password())) {
                 throw new BadRequestException("La contraseña debe tener entre 4 y 10 caracteres");
@@ -97,12 +97,14 @@ public class UsuarioService {
         return UsuarioResponse.de(usuarios.save(u));
     }
 
-    /** Cada usuario puede editar sus propios datos básicos (no su rol ni su correo). */
+    /** Cada usuario puede editar sus propios datos básicos (no su tipo, correo ni RUN). */
     @Transactional
     public UsuarioResponse actualizarPerfil(String correo, PerfilRequest r) {
         Usuario u = buscarPorCorreo(correo);
         u.setNombre(r.nombre().trim());
         u.setApellidos(r.apellidos().trim());
+        u.setTelefono(vacioANull(r.telefono()));
+        u.setFechaNacimiento(r.fechaNacimiento());
         u.setRegion(r.region());
         u.setComuna(r.comuna());
         u.setDireccion(r.direccion());
@@ -134,14 +136,25 @@ public class UsuarioService {
     }
 
     private void copiarDatos(Usuario u, UsuarioRequest r) {
+        Role rol;
+        try {
+            rol = Role.desdeEtiqueta(r.tipoUsuario());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("El tipo de usuario debe ser Administrador, Vendedor o Cliente");
+        }
         u.setNombre(r.nombre().trim());
         u.setApellidos(r.apellidos().trim());
+        u.setTelefono(vacioANull(r.telefono()));
         u.setFechaNacimiento(r.fechaNacimiento());
         u.setRegion(r.region());
         u.setComuna(r.comuna());
         u.setDireccion(r.direccion());
-        u.setRol(r.rol());
+        u.setRol(rol);
         u.setActivo(r.activo() == null || r.activo());
+    }
+
+    private String vacioANull(String texto) {
+        return (texto == null || texto.isBlank()) ? null : texto.trim();
     }
 
     private Usuario buscar(Long id) {

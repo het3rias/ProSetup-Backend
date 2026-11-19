@@ -5,17 +5,20 @@ import cl.prosetup.backend.dto.OrdenRequest;
 import cl.prosetup.backend.dto.OrdenResponse;
 import cl.prosetup.backend.service.OrdenService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/ordenes")
-@Tag(name = "Órdenes", description = "Compras. Cualquier usuario autenticado compra; ADMIN/VENDEDOR gestionan.")
+@Tag(name = "Órdenes", description = "Compras. Se puede comprar con o sin sesión; ADMIN/VENDEDOR gestionan.")
 public class OrdenController {
 
     private final OrdenService service;
@@ -26,9 +29,10 @@ public class OrdenController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Crear una orden de compra (usuario autenticado)")
-    public OrdenResponse crear(Authentication auth, @Valid @RequestBody OrdenRequest r) {
-        return service.crear(auth.getName(), r);
+    @SecurityRequirements
+    @Operation(summary = "Crear una orden de compra (público: con sesión queda asociada al usuario)")
+    public OrdenResponse crear(@AuthenticationPrincipal UserDetails usuario, @Valid @RequestBody OrdenRequest r) {
+        return service.crear(usuario == null ? null : usuario.getUsername(), r);
     }
 
     @GetMapping("/mias")
@@ -50,7 +54,7 @@ public class OrdenController {
     }
 
     @PutMapping("/{id}/estado")
-    @Operation(summary = "Cambiar el estado de una orden (ADMIN/VENDEDOR)")
+    @Operation(summary = "Cambiar el estado de una orden (ADMIN)")
     public OrdenResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody EstadoRequest r) {
         return service.cambiarEstado(id, r.estado());
     }

@@ -30,8 +30,8 @@ public class AuthService {
     /** Valida correo y contraseña (BCrypt) y entrega access token + refresh token. */
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest r) {
-        authManager.authenticate(new UsernamePasswordAuthenticationToken(r.correo().trim(), r.password()));
-        Usuario u = usuarios.findByCorreoIgnoreCase(r.correo().trim())
+        authManager.authenticate(new UsernamePasswordAuthenticationToken(r.email().trim(), r.password()));
+        Usuario u = usuarios.findByCorreoIgnoreCase(r.email().trim())
                 .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));
         return respuesta(u);
     }
