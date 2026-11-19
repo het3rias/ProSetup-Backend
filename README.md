@@ -40,25 +40,25 @@ Si MySQL tiene contraseña, definir las variables de entorno `DB_USER` y `DB_PAS
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
 | POST | /api/auth/register | Público | Registra un cliente (rol siempre CLIENTE) |
-| POST | /api/auth/login | Público | Devuelve accessToken y refreshToken |
+| POST | /api/auth/login | Público | Body `{email, password}`. Devuelve accessToken, refreshToken y el usuario |
 | POST | /api/auth/refresh | Público | Renueva los tokens con el refreshToken |
 | GET | /api/auth/me | Autenticado | Usuario actual (restaurar sesión al recargar) |
 | GET | /api/productos | Público | Lista productos (filtros `q`, `categoriaId`, `oferta`) |
 | GET | /api/productos/{id} | Público | Detalle de un producto |
 | GET | /api/productos/criticos | ADMIN, VENDEDOR | Productos con stock crítico |
-| POST | /api/productos | ADMIN, VENDEDOR | Crea un producto |
-| PUT | /api/productos/{id} | ADMIN, VENDEDOR | Actualiza un producto |
+| POST | /api/productos | ADMIN | Crea un producto |
+| PUT | /api/productos/{id} | ADMIN | Actualiza un producto (el VENDEDOR solo consulta) |
 | DELETE | /api/productos/{id} | ADMIN | Elimina un producto |
 | GET | /api/categorias, /api/categorias/{id} | Público | Lee categorías |
 | POST, PUT, DELETE | /api/categorias[/{id}] | ADMIN | Crea, actualiza y elimina categorías |
 | GET, PUT | /api/usuarios/me | Autenticado | Ver y editar mi perfil |
 | GET, POST | /api/usuarios | ADMIN | Lista y crea usuarios (cualquier rol) |
 | GET, PUT, DELETE | /api/usuarios/{id} | ADMIN | Ver, actualizar y eliminar usuarios |
-| POST | /api/ordenes | Autenticado | Crea una compra (descuenta stock, calcula total) |
+| POST | /api/ordenes | Público (invitado o con sesión) | Crea una compra: el servidor calcula precios, envío y total, y descuenta el stock. Si falta stock o se simula rechazo queda `Rechazada` |
 | GET | /api/ordenes/mias | Autenticado | Mis órdenes |
 | GET | /api/ordenes | ADMIN, VENDEDOR | Todas las órdenes |
 | GET | /api/ordenes/{id} | Dueño, ADMIN, VENDEDOR | Detalle de una orden |
-| PUT | /api/ordenes/{id}/estado | ADMIN, VENDEDOR | Cambia el estado (si se cancela, devuelve el stock) |
+| PUT | /api/ordenes/{id}/estado | ADMIN | Cambia el estado de la orden |
 | GET | /api/admin/dashboard | ADMIN, VENDEDOR | Estadísticas del panel |
 
 Códigos de respuesta: 200/201/204 éxito, 400 datos inválidos, 401 sin token o token inválido, 403 sin permiso por rol, 404 no encontrado, 409 conflicto (duplicado o registro relacionado).
@@ -72,11 +72,18 @@ Códigos de respuesta: 200/201/204 éxito, 400 datos inválidos, 401 sin token o
 - `JwtAuthFilter` revisa el token en cada petición y deja al usuario autenticado con su rol. La API es **stateless** (sin sesiones en el servidor).
 - `SecurityConfig` define qué rol puede usar cada ruta.
 
+## Formato de los datos (contrato con el frontend)
+
+- Usuario: `{id, run, nombre, apellidos, email, telefono, fechaNacimiento, tipoUsuario, region, comuna, direccion}`. `tipoUsuario` es `Administrador`, `Vendedor` o `Cliente`. La contraseña nunca se devuelve.
+- Producto: `{id, codigo, nombre, descripcion, precio, precioOferta, stock, stockCritico, categoria, imagen}` (`categoria` es el nombre).
+- Orden: `{id, codigo ("ORDER-n"), fecha, estado, motivo, usuarioEmail, cliente, direccion, entrega, items, subtotal, costoEnvio, total}`. Estados: `Pagada`, `Enviada`, `Entregada`, `Rechazada`.
+- Envío: gratis con retiro en tienda o compras desde $50.000; si no, $3.990.
+
 ## Reglas de negocio
 
 - RUN validado con módulo 11; correos solo `@duoc.cl`, `@profesor.duoc.cl` o `@gmail.com`; contraseña de 4 a 10 caracteres.
 - El registro público siempre crea clientes; solo un ADMIN puede crear usuarios con otro rol.
-- Al comprar: se verifica stock, el precio con descuento y el total se calculan en el servidor, y se descuenta el stock. La boleta guarda el nombre y precio del producto al momento de la compra.
+- Al comprar: se verifica stock (con bloqueo para evitar ventas dobles), el precio con descuento, el envío y el total se calculan en el servidor, y se descuenta el stock. Una orden rechazada se guarda con su motivo y no toca el stock. La boleta guarda el nombre y precio del producto al momento de la compra.
 - No se puede eliminar una categoría con productos, ni productos o usuarios que ya tienen órdenes (responde 409).
 
 ## Estructura

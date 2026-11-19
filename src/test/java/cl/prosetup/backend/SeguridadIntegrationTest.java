@@ -14,7 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Prueba de integración: autenticación JWT y permisos por rol, con H2 en memoria. */
+/** Prueba de integración: autenticación JWT, permisos por rol y compra, con H2 en memoria. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -26,30 +26,35 @@ class SeguridadIntegrationTest {
     @Autowired
     ObjectMapper om;
 
-    private JsonNode login(String correo, String password) throws Exception {
+    private JsonNode login(String email, String password) throws Exception {
         String body = mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"correo\":\"" + correo + "\",\"password\":\"" + password + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return om.readTree(body);
     }
 
-    private String token(String correo) throws Exception {
-        return "Bearer " + login(correo, "1234").get("accessToken").asText();
+    private String token(String email) throws Exception {
+        return "Bearer " + login(email, "1234").get("accessToken").asText();
     }
 
-    private long primeraCategoriaId() throws Exception {
+    private String nombrePrimeraCategoria() throws Exception {
         String body = mvc.perform(get("/api/categorias"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return om.readTree(body).get(0).get("id").asLong();
+        return om.readTree(body).get(0).get("nombre").asText();
     }
 
-    private String productoJson(String codigo, long categoriaId) {
+    private String productoJson(String codigo, String categoria) {
         return "{\"codigo\":\"" + codigo + "\",\"nombre\":\"Producto de prueba\",\"descripcion\":\"desc\","
-                + "\"precio\":10000,\"stock\":5,\"stockCritico\":2,\"imagen\":\"x.jpg\","
-                + "\"oferta\":false,\"descuento\":0,\"categoriaId\":" + categoriaId + "}";
+                + "\"precio\":10000,\"precioOferta\":null,\"stock\":5,\"stockCritico\":2,\"imagen\":\"/img/x.jpg\","
+                + "\"categoria\":\"" + categoria + "\"}";
+    }
+
+    private JsonNode primerProducto() throws Exception {
+        String body = mvc.perform(get("/api/productos")).andReturn().getResponse().getContentAsString();
+        return om.readTree(body).get(0);
     }
 
     @Test
@@ -62,23 +67,21 @@ class SeguridadIntegrationTest {
     void sinTokenNoSePuedeCrearProducto() throws Exception {
         mvc.perform(post("/api/productos")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(productoJson("SIN-TOKEN", primeraCategoriaId())))
+                        .content(productoJson("SIN-TOKEN", nombrePrimeraCategoria())))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void clienteNoPuedeCrearProductoPeroAdminSi() throws Exception {
-        long cat = primeraCategoriaId();
-        mvc.perform(post("/api/productos")
-                        .header("Authorization", token("cliente@gmail.com"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(productoJson("CLI-001", cat)))
+    void soloAdminPuedeCrearProductos() throws Exception {
+        String cat = nombrePrimeraCategoria();
+        mvc.perform(post("/api/productos").header("Authorization", token("cliente@gmail.com"))
+                        .contentType(MediaType.APPLICATION_JSON).content(productoJson("CLI-001", cat)))
                 .andExpect(status().isForbidden());
-
-        mvc.perform(post("/api/productos")
-                        .header("Authorization", token("admin@duoc.cl"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(productoJson("ADM-001", cat)))
+        mvc.perform(post("/api/productos").header("Authorization", token("vendedor@duoc.cl"))
+                        .contentType(MediaType.APPLICATION_JSON).content(productoJson("VEN-001", cat)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/productos").header("Authorization", token("admin@duoc.cl"))
+                        .contentType(MediaType.APPLICATION_JSON).content(productoJson("ADM-001", cat)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.codigo").value("ADM-001"));
     }
@@ -94,23 +97,39 @@ class SeguridadIntegrationTest {
     }
 
     @Test
+    void ordenesLasVeSoloElPersonal() throws Exception {
+        mvc.perform(get("/api/ordenes").header("Authorization", token("cliente@gmail.com")))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/ordenes").header("Authorization", token("vendedor@duoc.cl")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void loginConClaveIncorrectaDa401() throws Exception {
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"correo\":\"admin@duoc.cl\",\"password\":\"mala\"}"))
+                        .content("{\"email\":\"admin@duoc.cl\",\"password\":\"mala\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
+    void meDevuelveElUsuarioConSuTipo() throws Exception {
+        mvc.perform(get("/api/auth/me").header("Authorization", token("vendedor@duoc.cl")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipoUsuario").value("Vendedor"))
+                .andExpect(jsonPath("$.email").value("vendedor@duoc.cl"));
+    }
+
+    @Test
     void registroCreaSiempreUnClienteYRechazaRunInvalido() throws Exception {
-        String valido = "{\"run\":\"15.555.555-6\",\"nombre\":\"Ana\",\"apellidos\":\"Pérez\","
-                + "\"correo\":\"ana@gmail.com\",\"password\":\"abcd\"}";
+        String valido = "{\"run\":\"155555556\",\"nombre\":\"Ana\",\"apellidos\":\"Pérez\","
+                + "\"email\":\"ana@gmail.com\",\"password\":\"abcd\"}";
         mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(valido))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.rol").value("CLIENTE"));
+                .andExpect(jsonPath("$.tipoUsuario").value("Cliente"));
 
-        String invalido = "{\"run\":\"15.555.555-1\",\"nombre\":\"Ana\",\"apellidos\":\"Pérez\","
-                + "\"correo\":\"ana2@gmail.com\",\"password\":\"abcd\"}";
+        String invalido = "{\"run\":\"155555551\",\"nombre\":\"Ana\",\"apellidos\":\"Pérez\","
+                + "\"email\":\"ana2@gmail.com\",\"password\":\"abcd\"}";
         mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(invalido))
                 .andExpect(status().isBadRequest());
     }
@@ -134,18 +153,76 @@ class SeguridadIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    @Test
-    void compraDescuentaStockYCalculaTotal() throws Exception {
-        String productos = mvc.perform(get("/api/productos")).andReturn().getResponse().getContentAsString();
-        JsonNode p = om.readTree(productos).get(0);
-        long id = p.get("id").asLong();
-        int precioFinal = p.get("precioFinal").asInt();
+    private String ordenJson(long productoId, int cantidad, boolean simularRechazo) {
+        return "{\"cliente\":{\"nombre\":\"Camila\",\"apellidos\":\"Rojas\",\"email\":\"cliente@gmail.com\"},"
+                + "\"direccion\":{\"calle\":\"Los Crisantemos 1450\",\"departamento\":\"\",\"region\":\"RM\",\"comuna\":\"La Florida\",\"indicaciones\":\"\"},"
+                + "\"entrega\":\"domicilio\",\"simularRechazo\":" + simularRechazo + ","
+                + "\"items\":[{\"id\":" + productoId + ",\"cantidad\":" + cantidad + "}]}";
+    }
 
-        mvc.perform(post("/api/ordenes")
-                        .header("Authorization", token("cliente@gmail.com"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"items\":[{\"productoId\":" + id + ",\"cantidad\":2}]}"))
+    @Test
+    void invitadoPuedeComprarYElServidorCalculaElTotal() throws Exception {
+        JsonNode p = primerProducto();
+        long id = p.get("id").asLong();
+        int precio = p.get("precioOferta").isNull() ? p.get("precio").asInt() : p.get("precioOferta").asInt();
+        int subtotal = precio * 2;
+        int envio = subtotal >= 50000 ? 0 : 3990;
+
+        mvc.perform(post("/api/ordenes").contentType(MediaType.APPLICATION_JSON).content(ordenJson(id, 2, false)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.total").value(precioFinal * 2));
+                .andExpect(jsonPath("$.estado").value("Pagada"))
+                .andExpect(jsonPath("$.subtotal").value(subtotal))
+                .andExpect(jsonPath("$.total").value(subtotal + envio))
+                .andExpect(jsonPath("$.usuarioEmail").doesNotExist());
+    }
+
+    @Test
+    void ordenConSesionQuedaAsociadaAlUsuario() throws Exception {
+        long id = primerProducto().get("id").asLong();
+        mvc.perform(post("/api/ordenes").header("Authorization", token("cliente@gmail.com"))
+                        .contentType(MediaType.APPLICATION_JSON).content(ordenJson(id, 1, false)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.usuarioEmail").value("cliente@gmail.com"));
+    }
+
+    @Test
+    void ordenSinStockSuficienteQuedaRechazadaYNoDescuentaStock() throws Exception {
+        JsonNode p = primerProducto();
+        long id = p.get("id").asLong();
+        int stock = p.get("stock").asInt();
+
+        mvc.perform(post("/api/ordenes").contentType(MediaType.APPLICATION_JSON).content(ordenJson(id, stock + 1, false)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.estado").value("Rechazada"));
+
+        mvc.perform(get("/api/productos/" + id))
+                .andExpect(jsonPath("$.stock").value(stock));
+    }
+
+    @Test
+    void pagoRechazadoSimuladoNoDescuentaStock() throws Exception {
+        JsonNode p = primerProducto();
+        long id = p.get("id").asLong();
+        int stock = p.get("stock").asInt();
+
+        mvc.perform(post("/api/ordenes").contentType(MediaType.APPLICATION_JSON).content(ordenJson(id, 1, true)))
+                .andExpect(jsonPath("$.estado").value("Rechazada"));
+        mvc.perform(get("/api/productos/" + id)).andExpect(jsonPath("$.stock").value(stock));
+    }
+
+    @Test
+    void soloAdminCambiaElEstadoDeUnaOrden() throws Exception {
+        long id = primerProducto().get("id").asLong();
+        String orden = mvc.perform(post("/api/ordenes").contentType(MediaType.APPLICATION_JSON).content(ordenJson(id, 1, false)))
+                .andReturn().getResponse().getContentAsString();
+        long ordenId = om.readTree(orden).get("id").asLong();
+
+        mvc.perform(put("/api/ordenes/" + ordenId + "/estado").header("Authorization", token("vendedor@duoc.cl"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"estado\":\"Enviada\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/ordenes/" + ordenId + "/estado").header("Authorization", token("admin@duoc.cl"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"estado\":\"Enviada\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("Enviada"));
     }
 }

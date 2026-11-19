@@ -45,11 +45,11 @@ public class SecurityConfig {
                 // Autenticación pública
                 .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
 
-                // Productos: ver es público, editar ADMIN/VENDEDOR, eliminar solo ADMIN
+                // Productos: ver es público; el stock crítico lo ven ADMIN y VENDEDOR; crear, editar y eliminar solo ADMIN
                 .requestMatchers(HttpMethod.GET, "/api/productos/criticos").hasAnyRole("ADMIN", "VENDEDOR")
                 .requestMatchers(HttpMethod.GET, "/api/productos", "/api/productos/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/productos").hasAnyRole("ADMIN", "VENDEDOR")
-                .requestMatchers(HttpMethod.PUT, "/api/productos/**").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.POST, "/api/productos").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/productos/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/productos/**").hasRole("ADMIN")
 
                 // Categorías: ver es público, escribir solo ADMIN
@@ -60,11 +60,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/usuarios/me").authenticated()
                 .requestMatchers("/api/usuarios", "/api/usuarios/**").hasRole("ADMIN")
 
-                // Órdenes
-                .requestMatchers(HttpMethod.POST, "/api/ordenes").authenticated()
+                // Órdenes: se puede comprar sin iniciar sesión (invitado); ver y gestionar requiere rol
+                .requestMatchers(HttpMethod.POST, "/api/ordenes").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/ordenes/mias").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/ordenes").hasAnyRole("ADMIN", "VENDEDOR")
-                .requestMatchers(HttpMethod.PUT, "/api/ordenes/*/estado").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.PUT, "/api/ordenes/*/estado").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/ordenes/*").authenticated()
 
                 // Panel de administración
