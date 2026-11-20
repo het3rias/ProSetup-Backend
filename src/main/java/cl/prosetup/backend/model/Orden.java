@@ -10,7 +10,7 @@ import java.util.List;
  * también se puede comprar sin iniciar sesión (usuario = null).
  */
 @Entity
-@Table(name = "ordenes")
+@Table(name = "boleta")
 public class Orden {
 
     @Id

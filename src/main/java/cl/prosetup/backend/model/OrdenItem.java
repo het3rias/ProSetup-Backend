@@ -3,7 +3,7 @@ package cl.prosetup.backend.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "orden_items")
+@Table(name = "detalle_boleta")
 public class OrdenItem {
 
     @Id
@@ -11,7 +11,7 @@ public class OrdenItem {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "orden_id", nullable = false)
+    @JoinColumn(name = "boleta_id", nullable = false)
     private Orden orden;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

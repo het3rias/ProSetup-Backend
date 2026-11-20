@@ -3,7 +3,7 @@ package cl.prosetup.backend.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "categorias")
+@Table(name = "categoria")
 public class Categoria {
 
     @Id
