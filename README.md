@@ -31,7 +31,7 @@ Si MySQL tiene contraseña, definir las variables de entorno `DB_USER` y `DB_PAS
 
 ## Probar en Swagger
 
-1. En `POST /api/auth/login` entrar con una cuenta de prueba y copiar el `accessToken`.
+1. En `POST /api/v1/auth/login` entrar con una cuenta de prueba y copiar el `accessToken`.
 2. Presionar el botón **Authorize** (arriba a la derecha) y pegar el token.
 3. Ya se pueden probar los endpoints protegidos según el rol.
 
@@ -39,27 +39,37 @@ Si MySQL tiene contraseña, definir las variables de entorno `DB_USER` y `DB_PAS
 
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
-| POST | /api/auth/register | Público | Registra un cliente (rol siempre CLIENTE) |
-| POST | /api/auth/login | Público | Body `{email, password}`. Devuelve accessToken, refreshToken y el usuario |
-| POST | /api/auth/refresh | Público | Renueva los tokens con el refreshToken |
-| GET | /api/auth/me | Autenticado | Usuario actual (restaurar sesión al recargar) |
-| GET | /api/productos | Público | Lista productos (filtros `q`, `categoriaId`, `oferta`) |
-| GET | /api/productos/{id} | Público | Detalle de un producto |
-| GET | /api/productos/criticos | ADMIN, VENDEDOR | Productos con stock crítico |
-| POST | /api/productos | ADMIN | Crea un producto |
-| PUT | /api/productos/{id} | ADMIN | Actualiza un producto (el VENDEDOR solo consulta) |
-| DELETE | /api/productos/{id} | ADMIN | Elimina un producto |
-| GET | /api/categorias, /api/categorias/{id} | Público | Lee categorías |
-| POST, PUT, DELETE | /api/categorias[/{id}] | ADMIN | Crea, actualiza y elimina categorías |
-| GET, PUT | /api/usuarios/me | Autenticado | Ver y editar mi perfil |
-| GET, POST | /api/usuarios | ADMIN | Lista y crea usuarios (cualquier rol) |
-| GET, PUT, DELETE | /api/usuarios/{id} | ADMIN | Ver, actualizar y eliminar usuarios |
-| POST | /api/ordenes | Público (invitado o con sesión) | Crea una compra: el servidor calcula precios, envío y total, y descuenta el stock. Si falta stock o se simula rechazo queda `Rechazada` |
-| GET | /api/ordenes/mias | Autenticado | Mis órdenes |
-| GET | /api/ordenes | ADMIN, VENDEDOR | Todas las órdenes |
-| GET | /api/ordenes/{id} | Dueño, ADMIN, VENDEDOR | Detalle de una orden |
-| PUT | /api/ordenes/{id}/estado | ADMIN | Cambia el estado de la orden |
-| GET | /api/admin/dashboard | ADMIN, VENDEDOR | Estadísticas del panel |
+| POST | /api/v1/auth/register | Público | Registra un cliente (rol siempre CLIENTE) |
+| POST | /api/v1/auth/login | Público | Body `{email, password}`. Devuelve accessToken, refreshToken y el usuario |
+| POST | /api/v1/auth/refresh | Público | Renueva los tokens con el refreshToken |
+| GET | /api/v1/auth/me | Autenticado | Usuario actual (restaurar sesión al recargar) |
+| GET | /api/v1/productos | Público | Lista productos (filtros `q`, `categoriaId`, `oferta`) |
+| GET | /api/v1/productos/{id} | Público | Detalle de un producto |
+| GET | /api/v1/productos/criticos | ADMIN | Productos con stock crítico |
+| POST | /api/v1/productos | ADMIN | Crea un producto |
+| PUT | /api/v1/productos/{id} | ADMIN | Actualiza un producto (el VENDEDOR solo consulta) |
+| DELETE | /api/v1/productos/{id} | ADMIN | Elimina un producto |
+| GET | /api/v1/categorias, /api/v1/categorias/{id} | Público | Lee categorías |
+| POST, PUT, DELETE | /api/v1/categorias[/{id}] | ADMIN | Crea, actualiza y elimina categorías |
+| GET, PUT | /api/v1/usuarios/me | Autenticado | Ver y editar mi perfil |
+| GET, POST | /api/v1/usuarios | ADMIN | Lista y crea usuarios (cualquier rol) |
+| GET, PUT, DELETE | /api/v1/usuarios/{id} | ADMIN | Ver, actualizar y eliminar usuarios |
+| POST | /api/v1/ordenes | Público (invitado o con sesión) | Crea una compra: el servidor calcula precios, envío y total, y descuenta el stock. Si falta stock o se simula rechazo queda `Rechazada` |
+| GET | /api/v1/ordenes/mias | Autenticado | Mis órdenes |
+| GET | /api/v1/ordenes | ADMIN, VENDEDOR | Todas las órdenes |
+| GET | /api/v1/ordenes/{id} | Dueño, ADMIN, VENDEDOR | Detalle de una orden |
+| PUT | /api/v1/ordenes/{id}/estado | ADMIN | Cambia el estado de la orden |
+| GET | /api/v1/admin/dashboard | ADMIN | Estadísticas del panel |
+
+Todas las rutas llevan el prefijo de versión `/api/v1`. El VENDEDOR solo puede consultar productos y órdenes (lista y detalle); el resto de las acciones le responde 403.
+
+## Modelo de datos
+
+Tablas: `usuario` → `boleta` → `detalle_boleta` → `producto` ← `categoria`.
+
+- `boleta` guarda la compra (cliente, entrega, subtotal, envío, total, estado). El usuario es opcional, porque se permite comprar como invitado.
+- `detalle_boleta` guarda cada línea con el nombre y el precio del producto al momento de la compra.
+- Entidades JPA: `Orden` (tabla `boleta`) y `OrdenItem` (tabla `detalle_boleta`).
 
 Códigos de respuesta: 200/201/204 éxito, 400 datos inválidos, 401 sin token o token inválido, 403 sin permiso por rol, 404 no encontrado, 409 conflicto (duplicado o registro relacionado).
 
@@ -67,7 +77,7 @@ Códigos de respuesta: 200/201/204 éxito, 400 datos inválidos, 401 sin token o
 
 - Al hacer login se validan correo y contraseña (almacenada con **BCrypt**) y se entregan dos tokens JWT firmados (HMAC-SHA):
   - **accessToken** (30 min): se envía en cada petición con `Authorization: Bearer <token>`.
-  - **refreshToken** (7 días): solo sirve en `/api/auth/refresh` para obtener un nuevo par de tokens.
+  - **refreshToken** (7 días): solo sirve en `/api/v1/auth/refresh` para obtener un nuevo par de tokens.
 - Cada token lleva el correo, el rol y un claim `type` (`access` o `refresh`) para que uno no pueda usarse como el otro.
 - `JwtAuthFilter` revisa el token en cada petición y deja al usuario autenticado con su rol. La API es **stateless** (sin sesiones en el servidor).
 - `SecurityConfig` define qué rol puede usar cada ruta.
