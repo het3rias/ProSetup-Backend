@@ -43,32 +43,32 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // Autenticación pública
-                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
+                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh").permitAll()
 
                 // Productos: ver es público; el stock crítico lo ven ADMIN y VENDEDOR; crear, editar y eliminar solo ADMIN
-                .requestMatchers(HttpMethod.GET, "/api/productos/criticos").hasAnyRole("ADMIN", "VENDEDOR")
-                .requestMatchers(HttpMethod.GET, "/api/productos", "/api/productos/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/productos").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/productos/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/productos/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/productos/criticos").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/productos", "/api/v1/productos/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/productos").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/productos/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/productos/**").hasRole("ADMIN")
 
                 // Categorías: ver es público, escribir solo ADMIN
-                .requestMatchers(HttpMethod.GET, "/api/categorias", "/api/categorias/**").permitAll()
-                .requestMatchers("/api/categorias/**", "/api/categorias").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/categorias", "/api/v1/categorias/**").permitAll()
+                .requestMatchers("/api/v1/categorias/**", "/api/v1/categorias").hasRole("ADMIN")
 
                 // Usuarios: /me para cualquier autenticado, el resto solo ADMIN
-                .requestMatchers("/api/usuarios/me").authenticated()
-                .requestMatchers("/api/usuarios", "/api/usuarios/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/usuarios/me").authenticated()
+                .requestMatchers("/api/v1/usuarios", "/api/v1/usuarios/**").hasRole("ADMIN")
 
                 // Órdenes: se puede comprar sin iniciar sesión (invitado); ver y gestionar requiere rol
-                .requestMatchers(HttpMethod.POST, "/api/ordenes").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/ordenes/mias").authenticated()
-                .requestMatchers(HttpMethod.GET, "/api/ordenes").hasAnyRole("ADMIN", "VENDEDOR")
-                .requestMatchers(HttpMethod.PUT, "/api/ordenes/*/estado").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/ordenes/*").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/v1/ordenes").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/ordenes/mias").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/ordenes").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/ordenes/*/estado").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/ordenes/*").authenticated()
 
                 // Panel de administración
-                .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "VENDEDOR")
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 
                 // Cualquier otra ruta (por ejemplo /api/auth/me) requiere estar autenticado
                 .anyRequest().authenticated())

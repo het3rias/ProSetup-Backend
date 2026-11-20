@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/ordenes")
+@RequestMapping("/api/v1/ordenes")
 @Tag(name = "Órdenes", description = "Compras. Se puede comprar con o sin sesión; ADMIN/VENDEDOR gestionan.")
 public class OrdenController {
 

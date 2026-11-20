@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/categorias")
+@RequestMapping("/api/v1/categorias")
 @Tag(name = "Categorías", description = "CRUD de categorías. Lectura pública; escritura solo ADMIN.")
 public class CategoriaController {
 

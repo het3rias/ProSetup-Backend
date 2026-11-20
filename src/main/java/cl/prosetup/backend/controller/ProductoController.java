@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/productos")
+@RequestMapping("/api/v1/productos")
 @Tag(name = "Productos", description = "CRUD de productos. Lectura pública; crear, editar y eliminar solo ADMIN.")
 public class ProductoController {
 
