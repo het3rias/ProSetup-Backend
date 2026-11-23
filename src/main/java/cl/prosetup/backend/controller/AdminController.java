@@ -1,12 +1,13 @@
 package cl.prosetup.backend.controller;
 
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import cl.prosetup.backend.dto.DashboardResponse;
 import cl.prosetup.backend.service.OrdenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -20,7 +21,7 @@ public class AdminController {
     }
 
     @GetMapping("/dashboard")
-    @Operation(summary = "Estadísticas del dashboard (ADMIN/VENDEDOR)")
+    @Operation(summary = "Estadísticas del dashboard (ADMIN)")
     public DashboardResponse dashboard() {
         return ordenes.dashboard();
     }
