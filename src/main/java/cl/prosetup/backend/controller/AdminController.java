@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/v1/admin")
-@Tag(name = "Administración", description = "Estadísticas del panel (ADMIN/VENDEDOR).")
+@Tag(name = "Administración", description = "Estadísticas del panel (ADMIN).")
 public class AdminController {
 
     private final OrdenService ordenes;
